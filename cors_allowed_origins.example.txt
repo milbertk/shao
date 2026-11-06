@@ -1,0 +1,11 @@
+# Allowed browser origins for shao when APP_ENV=production (security S9).
+# Copy this file to cors_allowed_origins.txt (next to the shao binary) and
+# write the REAL addresses of p3 and the store, one per line, without "/" at the end.
+# CORS_ALLOWED_ORIGINS (environment) is added to this list.
+#
+# 2026-10-31: a line WITHOUT http(s):// is a DOMAIN = the domain and all its
+# subdomains, http and https. Normally ALLOWED_DOMAINS in .env is enough and this
+# file is only for extra exact origins.
+aleph-k.com
+aleph-k.online
+# https://partner.example.com

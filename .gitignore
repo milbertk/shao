@@ -1,0 +1,24 @@
+# Build outputs (do not commit; 48 MB each)
+/main
+/shao
+*.exe
+
+# Local secrets — never commit (security S5, 2026-10-25)
+.env
+connection.json
+databaseConnection.json
+*firebase-adminsdk*.json
+*-adminsdk-*.json
+*.pem
+*.key
+
+# Local backups made by the AI assistant (they can contain old secrets/code)
+.ai_backups/
+
+# Production CORS list of this server (example: cors_allowed_origins.example.txt)
+cors_allowed_origins.txt
+
+# local data and built program
+*.mmdb
+GeoLite2-Country_*/
+/shao

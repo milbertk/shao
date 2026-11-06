@@ -1,0 +1,12 @@
+-- =====================================================================
+-- NOT NEEDED ANYMORE (2026-10-22). Do not run.
+-- The shao plan now lives in the shao database (tbl_company_plan, see
+-- sql/migration_company_plans.sql). You can delete this file.
+--
+-- If you already ran the old version of this file in the usersAK database,
+-- it added two empty columns to public.companies. They do no harm; to remove
+-- them, run this in the usersAK database:
+--
+-- ALTER TABLE public.companies DROP COLUMN IF EXISTS plan_started_at;
+-- ALTER TABLE public.companies DROP COLUMN IF EXISTS plan_ends_at;
+-- =====================================================================
