@@ -28,49 +28,77 @@ const allDayStart, allDayEnd = "00:00", "23:59"
 //   - the time matches one of the offered slots that still has capacity.
 //
 // An all-day slot is stored as 00:00–23:59.
-func ValidateRequestedSlot(companyID, serviceID, date, startHour, endHour string) (string, string, error) {
+//
+// Locations (2026-11-07): with locationID the slot must be in THAT location.
+// Without it (older store pages) the first free slot at that time is taken.
+// The location of the chosen slot is returned ("" = none) to be stored on
+// the appointment.
+func ValidateRequestedSlot(companyID, serviceID, date, startHour, endHour, locationID string) (string, string, string, error) {
 	product, err := blproducts.BSelectProductByInternalID(companyID, serviceID)
 	if err != nil {
 		if errors.Is(err, blproducts.ErrProductNotFound) {
-			return "", "", ErrServiceNotBookable
+			return "", "", "", ErrServiceNotBookable
 		}
-		return "", "", err
+		return "", "", "", err
 	}
 	if !product.ShowOnWeb || !strings.EqualFold(product.Status, "ACTIVE") {
-		return "", "", ErrServiceNotBookable
+		return "", "", "", ErrServiceNotBookable
 	}
 
 	if _, err := time.Parse(dateLayout, date); err != nil {
-		return "", "", fmt.Errorf("invalid appointmentDate (use YYYY-MM-DD)")
+		return "", "", "", fmt.Errorf("invalid appointmentDate (use YYYY-MM-DD)")
 	}
 
 	availability, err := BGetAvailabilityForDate(companyID, serviceID, date)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if !availability.Available {
 		if availability.Reason == "no active booking configuration" {
-			return "", "", ErrServiceNotBookable
+			return "", "", "", ErrServiceNotBookable
 		}
-		return "", "", ErrSlotTaken
+		return "", "", "", ErrSlotTaken
 	}
 
 	start, end := hhmm(startHour), hhmm(endHour)
-	for _, slot := range availability.Slots {
+	return matchSlot(availability.Slots, start, end, strings.TrimSpace(locationID))
+}
+
+// matchSlot finds the requested time (and location) among the free slots
+// (pure, tested).
+func matchSlot(slots []AvailableSlot, start, end, locationID string) (string, string, string, error) {
+	// The company stopped using locations (2026-11-08): the slots carry
+	// none, so a location sent by an open store page is ignored.
+	if locationID != "" && !anySlotLocated(slots) {
+		locationID = ""
+	}
+	for _, slot := range slots {
 		if slot.Remaining <= 0 {
+			continue
+		}
+		if locationID != "" && !strings.EqualFold(slot.LocationID, locationID) {
 			continue
 		}
 		if slot.AllDay {
 			if (start == "" && end == "") || (start == allDayStart && end == allDayEnd) {
-				return allDayStart, allDayEnd, nil
+				return allDayStart, allDayEnd, slot.LocationID, nil
 			}
 			continue
 		}
 		if slot.StartTime == start && slot.EndTime == end {
-			return start, end, nil
+			return start, end, slot.LocationID, nil
 		}
 	}
-	return "", "", ErrSlotTaken
+	return "", "", "", ErrSlotTaken
+}
+
+func anySlotLocated(slots []AvailableSlot) bool {
+	for _, slot := range slots {
+		if slot.LocationID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // hhmm normalizes "9:00", "09:00" or "09:00:00" to "09:00".

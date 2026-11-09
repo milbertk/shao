@@ -31,7 +31,9 @@ func (a *BookingManualSlotS) Update() error {
 			all_day = $4,
 			start_time = $5,
 			end_time = $6,
-			appointments = $7
+			appointments = $7,
+			location_id = $8,
+			customer_chooses_location = $9
 		WHERE manual_slot_id = $1
 		  AND company_id = $2
 		RETURNING manual_slot_id, created_at, updated_at
@@ -46,6 +48,8 @@ func (a *BookingManualSlotS) Update() error {
 		a.StartTime,
 		a.EndTime,
 		a.Appointments,
+		a.LocationID,
+		a.CustomerChoice,
 	).Scan(
 		&a.ManualSlotID,
 		&a.CreatedAt,

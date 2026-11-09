@@ -210,6 +210,7 @@ func toolDaySummary(tc *toolContext, input json.RawMessage) (any, error) {
 			CustomerName: a.CustomerName,
 			Service:      tc.serviceName(a.ServiceID),
 			Status:       a.Status,
+			Location:     derefString(a.LocationName),
 		})
 	}
 

@@ -34,23 +34,30 @@ type AppointmentSnapshot struct {
 	StartHour string
 	EndHour   string
 	Status    string
+	// Location (2026-11-07): id and name ("" = none).
+	LocationID   string
+	LocationName string
 }
 
 // SnapshotAppointment keeps the fields that matter to the customer.
 func SnapshotAppointment(a appointment.AppointmentS) AppointmentSnapshot {
 	return AppointmentSnapshot{
-		ServiceID: strings.TrimSpace(a.ServiceID),
-		Date:      strings.TrimSpace(a.AppointmentDate),
-		StartHour: shortHour(a.StartHour),
-		EndHour:   shortHour(a.EndHour),
-		Status:    strings.ToUpper(strings.TrimSpace(a.Status)),
+		ServiceID:    strings.TrimSpace(a.ServiceID),
+		Date:         strings.TrimSpace(a.AppointmentDate),
+		StartHour:    shortHour(a.StartHour),
+		EndHour:      shortHour(a.EndHour),
+		Status:       strings.ToUpper(strings.TrimSpace(a.Status)),
+		LocationID:   strings.ToLower(deref(a.LocationID)),
+		LocationName: deref(a.LocationName),
 	}
 }
 
-// AppointmentWhenChanged tells if service, date or time changed (pure, tested).
+// AppointmentWhenChanged tells if service, date, time or location changed
+// (pure, tested).
 func AppointmentWhenChanged(before, after AppointmentSnapshot) bool {
 	return before.ServiceID != after.ServiceID || before.Date != after.Date ||
-		before.StartHour != after.StartHour || before.EndHour != after.EndHour
+		before.StartHour != after.StartHour || before.EndHour != after.EndHour ||
+		before.LocationID != after.LocationID
 }
 
 // NotifyAppointmentModified tells the customer the new service / date / time
@@ -69,6 +76,10 @@ func NotifyAppointmentModified(companyID, appointmentID string, before Appointme
 			logNotSent(companyID, "APPOINTMENT", appointmentID, EventModified, "appointment not loaded: "+err.Error())
 			return
 		}
+		hideLocationWhenOff(&a)
+		if a.LocationName == nil {
+			before.LocationID, before.LocationName = "", ""
+		}
 		link := ""
 		if token, err := ensureAppointmentToken(companyID, appointmentID); err == nil {
 			link = manageLink(companyID, token)
@@ -86,9 +97,13 @@ func NotifyAppointmentModified(companyID, appointmentID string, before Appointme
 			}
 		}
 		previous := previousService + ", " + before.Date + " (" + timeRangeOn(c, before.Date, before.StartHour, before.EndHour) + ")"
+		if before.LocationID != strings.ToLower(deref(a.LocationID)) && before.LocationName != "" {
+			previous += ", " + before.LocationName
+		}
 
 		subject := fmt.Sprintf(t.apptModifiedSubject, c.displayName())
-		body := fmt.Sprintf(t.apptModifiedBody, service, a.AppointmentDate, when) + "\n" +
+		body := fmt.Sprintf(t.apptModifiedBody, service, a.AppointmentDate, when) +
+			appointmentLocationText(t, &a) + "\n" +
 			line(t.labelBefore, previous)
 		reference := service + ", " + a.AppointmentDate + " " + timeRange(c, a.StartHour, a.EndHour)
 		customerBody := fmt.Sprintf(t.hi, a.CustomerName) + "\n\n" + body + "\n" +

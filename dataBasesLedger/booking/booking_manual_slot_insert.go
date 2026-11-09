@@ -17,6 +17,8 @@ type BookingManualSlotS struct {
 	StartTime       *string   `json:"startTime,omitempty"` // "HH:MM"
 	EndTime         *string   `json:"endTime,omitempty"`   // "HH:MM"
 	Appointments    *int      `json:"appointments,omitempty"`
+	LocationID      *string   `json:"locationId,omitempty"`    // optional location of this slot (2026-11-07); nil = none
+	CustomerChoice  bool      `json:"customerChoosesLocation"` // any active location, the customer picks it (2026-11-08)
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
@@ -36,9 +38,11 @@ func (a *BookingManualSlotS) Insert() error {
 			all_day,
 			start_time,
 			end_time,
-			appointments
+			appointments,
+			location_id,
+			customer_chooses_location
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING manual_slot_id, created_at, updated_at
 	`
 
@@ -51,6 +55,8 @@ func (a *BookingManualSlotS) Insert() error {
 		a.StartTime,
 		a.EndTime,
 		a.Appointments,
+		a.LocationID,
+		a.CustomerChoice,
 	).Scan(
 		&a.ManualSlotID,
 		&a.CreatedAt,

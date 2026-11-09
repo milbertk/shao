@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 	"github.com/milbertk/shao/bussunessLedger/bltimezone"
 	blproducts "github.com/milbertk/shao/bussunessLedger/products"
 	"github.com/milbertk/shao/dataBasesLedger/booking"
@@ -53,6 +54,90 @@ func validateProductInCompany(companyID, productInternalID string) (string, erro
 	return strings.TrimSpace(product.Name), nil
 }
 
+// validateScheduleLocations normalizes the optional location of every range
+// and slot, checks that it exists in the company, and checks the "one
+// location at a time" rule (returns *bllocations.LocationOverlapError).
+func validateScheduleLocations(companyID string, input *BookingBundle) error {
+	byID, err := bllocations.CompanyLocations(companyID)
+	if err != nil {
+		return fmt.Errorf("failed to load locations: %w", err)
+	}
+	locationName := func(id *string) (string, error) {
+		if id == nil {
+			return "", nil
+		}
+		l, ok := byID[strings.ToLower(*id)]
+		if !ok || !bllocations.ValidID(*id) {
+			return "", fmt.Errorf("invalid location: %q does not exist in this company", *id)
+		}
+		return l.Name, nil
+	}
+
+	today := bltimezone.CompanyToday(companyID)
+	manualMode := strings.EqualFold(strings.TrimSpace(input.Config.AvailabilityMode), "MANUAL")
+	blocks := make([]bllocations.TimeBlock, 0)
+	scheduleName := strings.TrimSpace(input.Config.Name)
+
+	// "Customer chooses" (2026-11-08): the block has no location of its own
+	// and counts as AnyLocation for the "one location at a time" rule.
+	blockLocation := func(id *string, choice bool) string {
+		if choice {
+			return bllocations.AnyLocation
+		}
+		if id != nil {
+			return *id
+		}
+		return ""
+	}
+
+	for i := range input.RecurringRanges {
+		r := &input.RecurringRanges[i]
+		r.LocationID = bllocations.NormalizeID(r.LocationID)
+		if r.CustomerChoice {
+			r.LocationID = nil
+		}
+		name, err := locationName(r.LocationID)
+		if err != nil {
+			return err
+		}
+		if where := blockLocation(r.LocationID, r.CustomerChoice); where != "" && r.Active && !manualMode {
+			blocks = append(blocks, bllocations.TimeBlock{
+				Kind: bllocations.KindRecurring, ScheduleName: scheduleName,
+				DayOfWeek: r.DayOfWeek, StartTime: r.StartTime, EndTime: r.EndTime,
+				LocationID: where, LocationName: name,
+			})
+		}
+	}
+	for i := range input.ManualSlots {
+		s := &input.ManualSlots[i]
+		s.LocationID = bllocations.NormalizeID(s.LocationID)
+		if s.CustomerChoice {
+			s.LocationID = nil
+		}
+		name, err := locationName(s.LocationID)
+		if err != nil {
+			return err
+		}
+		if where := blockLocation(s.LocationID, s.CustomerChoice); where != "" && manualMode && strings.TrimSpace(s.SlotDate) >= today {
+			block := bllocations.TimeBlock{
+				Kind: bllocations.KindManual, ScheduleName: scheduleName,
+				Date: strings.TrimSpace(s.SlotDate), AllDay: s.AllDay,
+				LocationID: where, LocationName: name,
+			}
+			if !s.AllDay && s.StartTime != nil && s.EndTime != nil {
+				block.StartTime, block.EndTime = strings.TrimSpace(*s.StartTime), strings.TrimSpace(*s.EndTime)
+			}
+			blocks = append(blocks, block)
+		}
+	}
+
+	// A disabled schedule offers nothing: nothing to clash with.
+	if !input.Config.Active {
+		return nil
+	}
+	return bllocations.CheckScheduleBlocks(companyID, strings.TrimSpace(input.Config.BookingConfigID), blocks)
+}
+
 // BSaveBooking creates or updates a booking, then REWRITES its schedules.
 //
 //   - companyID is authoritative and forced onto every record.
@@ -61,6 +146,8 @@ func validateProductInCompany(companyID, productInternalID string) (string, erro
 //   - Recurring ranges: full replace (delete all, insert the provided list).
 //   - Manual slots: replace FROM TODAY FORWARD (past slots are kept as
 //     history), then insert the provided list.
+//   - Only the hours of the chosen mode are kept (2026-11-08); appointments
+//     are never touched.
 //
 // Returns the fresh header + both schedule lists as stored.
 func BSaveBooking(companyID string, input BookingBundle) (*BookingBundle, error) {
@@ -85,6 +172,23 @@ func BSaveBooking(companyID string, input BookingBundle) (*BookingBundle, error)
 
 	// One schedule per service: another schedule must not use this service.
 	if err := ensureServiceIsFree(companyID, input.Config.ServiceProductID, input.Config.BookingConfigID); err != nil {
+		return nil, err
+	}
+
+	// One mode only (2026-11-08): the hours of the other mode are deleted.
+	KeepActiveMode(&input)
+	// Past dates stay as history and are never inserted again (2026-11-08).
+	DropPastDates(&input, bltimezone.CompanyToday(companyID))
+
+	// Locations (2026-11-07): every location used must belong to the company,
+	// and with "one location at a time" the hours must not clash with hours
+	// in another location (any schedule of the company). Checked BEFORE
+	// anything is written.
+	if err := validateScheduleLocations(companyID, &input); err != nil {
+		return nil, err
+	}
+	// Same location, same hours: refused BEFORE the saved hours are deleted.
+	if err := CheckSameLocationOverlaps(input); err != nil {
 		return nil, err
 	}
 
@@ -144,7 +248,7 @@ func BSaveBooking(companyID string, input BookingBundle) (*BookingBundle, error)
 		input.RecurringRanges[i].Appointments = nilIfLessThanOne(input.RecurringRanges[i].Appointments)
 
 		if err := input.RecurringRanges[i].Insert(); err != nil {
-			return nil, fmt.Errorf("failed to insert recurring range: %w", err)
+			return nil, overlapOr(err, "failed to insert recurring range")
 		}
 	}
 
@@ -167,7 +271,7 @@ func BSaveBooking(companyID string, input BookingBundle) (*BookingBundle, error)
 		}
 
 		if err := input.ManualSlots[i].Insert(); err != nil {
-			return nil, fmt.Errorf("failed to insert manual slot: %w", err)
+			return nil, overlapOr(err, "failed to insert manual slot")
 		}
 	}
 

@@ -59,6 +59,7 @@ type textSet struct {
 	// More customer updates (2026-10-30)
 	apptModifiedSubject, apptModifiedBody   string // company | service, date, time
 	labelBefore                             string // previous date / time
+	labelLocation, labelMaps                string // location of an appointment (2026-11-07)
 	orderUpdatedSubject, orderUpdatedBody   string // ref | ref
 	orderItemStepSubject, orderItemStepBody string // ref, product | product, step, step status
 	orderStageSubject, orderStageBody       string // ref, stage | ref, stage, status
@@ -174,6 +175,8 @@ var textsEN = textSet{
 	apptModifiedSubject:  "Your appointment was changed — %s",
 	apptModifiedBody:     "Your appointment was changed. New details:\n%s, %s (%s).",
 	labelBefore:          "Before",
+	labelLocation:        "📍 Location",
+	labelMaps:            "Open in Maps",
 	orderUpdatedSubject:  "Your order %s was updated",
 	orderUpdatedBody:     "Your order %s was updated. These are the current details:",
 	orderItemStepSubject: "Update on your order %s: %s",
@@ -279,6 +282,8 @@ var textsES = textSet{
 	apptModifiedSubject:  "Su cita fue modificada — %s",
 	apptModifiedBody:     "Su cita fue modificada. Datos actuales:\n%s, %s (%s).",
 	labelBefore:          "Antes",
+	labelLocation:        "📍 Sede",
+	labelMaps:            "Abrir en Maps",
 	orderUpdatedSubject:  "Su pedido %s fue actualizado",
 	orderUpdatedBody:     "Su pedido %s fue actualizado. Estos son los datos actuales:",
 	orderItemStepSubject: "Actualización de su pedido %s: %s",

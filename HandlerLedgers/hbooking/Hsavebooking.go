@@ -1,6 +1,7 @@
 package bookinginshao
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/milbertk/security"
 	"github.com/milbertk/shao/HandlerLedgers/handlertracking"
 	blbooking "github.com/milbertk/shao/bussunessLedger/bbooking"
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 )
 
 // HSaveBooking creates or updates a booking configuration and rewrites its
@@ -64,6 +66,17 @@ func HSaveBooking(w http.ResponseWriter, r *http.Request) {
 			bundle.Config.ServiceProductID, exists.BookingConfigID)
 		writeBookingResponse(w, http.StatusConflict,
 			"This service already has a booking schedule. Open it to edit it.", exists)
+		return
+	}
+	// One location at a time (2026-11-07): the same hours are already in
+	// another location. The list lets the screen show each clash.
+	var overlap *bllocations.LocationOverlapError
+	if errors.As(err, &overlap) {
+		log.Printf("[HSaveBooking] Location overlap: %v", err)
+		writeBookingResponse(w, http.StatusConflict, err.Error(), map[string]interface{}{
+			"code":     "LOCATION_OVERLAP",
+			"overlaps": overlap.Overlaps,
+		})
 		return
 	}
 	if err != nil {

@@ -33,6 +33,7 @@ type MyBookingView struct {
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Token       string    `json:"token,omitempty"`
+	Location    string    `json:"location,omitempty"` // location name (2026-11-07)
 }
 
 // MyRequestsView is what a signed-in customer sees in "My orders / My
@@ -60,6 +61,7 @@ func BMyRequests(companyID, userID, email string, emailVerified bool) (*MyReques
 	email = strings.ToLower(strings.TrimSpace(email))
 
 	store := blpageconfiguration.BCompanyStoreSettings(companyID)
+	showLocations := locationsOn(companyID) // 2026-11-08
 	view := &MyRequestsView{
 		Email:               email,
 		EmailVerified:       emailVerified,
@@ -108,6 +110,7 @@ func BMyRequests(companyID, userID, email string, emailVerified bool) (*MyReques
 				Status:      strings.ToUpper(strings.TrimSpace(b.Status)),
 				CreatedAt:   b.CreatedAt,
 				Token:       appointmentToken(companyID, b),
+				Location:    ifShown(showLocations, b.LocationName),
 			})
 		}
 	}
@@ -146,4 +149,12 @@ func appointmentToken(companyID string, b appointment.CustomerAppointmentRow) st
 		return ""
 	}
 	return token
+}
+
+// ifShown returns the text only when shown is true.
+func ifShown(shown bool, text string) string {
+	if shown {
+		return text
+	}
+	return ""
 }

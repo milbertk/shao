@@ -24,6 +24,11 @@ type AppointmentS struct {
 	Status                string    `json:"status"`
 	Comments              *string   `json:"comments,omitempty"`
 	RegisteredBy          *string   `json:"registeredBy,omitempty"`
+	LocationID            *string   `json:"locationId,omitempty"`        // optional location (2026-11-07); nil = none
+	LocationName          *string   `json:"locationName,omitempty"`      // read only (from the location)
+	LocationAddress       *string   `json:"locationAddress,omitempty"`   // read only
+	LocationLatitude      *float64  `json:"locationLatitude,omitempty"`  // read only
+	LocationLongitude     *float64  `json:"locationLongitude,omitempty"` // read only
 	CreatedAt             time.Time `json:"createdAt"`
 	UpdatedAt             time.Time `json:"updatedAt"`
 }
@@ -50,12 +55,13 @@ func (a *AppointmentS) Insert() error {
 			end_hour,
 			status,
 			comments,
-			registered_by
+			registered_by,
+			location_id
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 			COALESCE(NULLIF($12, ''), 'SCHEDULED'),
-			$13, $14
+			$13, $14, $15
 		)
 		RETURNING appointment_id, created_at, updated_at
 	`
@@ -76,6 +82,7 @@ func (a *AppointmentS) Insert() error {
 		a.Status,
 		a.Comments,
 		a.RegisteredBy,
+		a.LocationID,
 	).Scan(
 		&a.AppointmentID,
 		&a.CreatedAt,

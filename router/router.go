@@ -14,6 +14,7 @@ import (
 	"github.com/milbertk/shao/HandlerLedgers/assistantinshao"
 	publicshowcaseinshao "github.com/milbertk/shao/HandlerLedgers/hPublicShowCase"
 	bookinginshao "github.com/milbertk/shao/HandlerLedgers/hbooking"
+	"github.com/milbertk/shao/HandlerLedgers/locationsinshao"
 	"github.com/milbertk/shao/HandlerLedgers/orderdetailsinshao"
 	"github.com/milbertk/shao/HandlerLedgers/orderitemtrackinginshao"
 	"github.com/milbertk/shao/HandlerLedgers/ordertrackinginshao"
@@ -364,6 +365,83 @@ func NewRouter() http.Handler {
 	).Methods(http.MethodGet)
 
 	// =================================================================
+	//  LOCATIONS ("Sedes", 2026-11-07) -> any active company member.
+	//  Reading is open to every member (the booking and appointment forms
+	//  need the list); changes need NAV_LOCATIONS_ACCESS or NAV_BOOKING_ACCESS
+	//  (OWNER / MANAGER always). Order (mux): ".../active" is its own path.
+	// =================================================================
+	r.Handle(
+		"/companies/{companyId}/locations",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("")(
+				http.HandlerFunc(locationsinshao.HListLocations),
+			),
+		),
+	).Methods(http.MethodGet)
+
+	r.Handle(
+		"/companies/{companyId}/locations",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("NAV_LOCATIONS_ACCESS,NAV_BOOKING_ACCESS")(
+				middlewares.RequireActivePlan( // read-only without an active plan
+					http.HandlerFunc(locationsinshao.HSaveLocation),
+				),
+			),
+		),
+	).Methods(http.MethodPost)
+
+	r.Handle(
+		"/companies/{companyId}/locations/{locationId}",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("")(
+				http.HandlerFunc(locationsinshao.HSelectLocation),
+			),
+		),
+	).Methods(http.MethodGet)
+
+	r.Handle(
+		"/companies/{companyId}/locations/{locationId}",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("NAV_LOCATIONS_ACCESS,NAV_BOOKING_ACCESS")(
+				middlewares.RequireActivePlan( // read-only without an active plan
+					http.HandlerFunc(locationsinshao.HDeleteLocation),
+				),
+			),
+		),
+	).Methods(http.MethodDelete)
+
+	r.Handle(
+		"/companies/{companyId}/locations/{locationId}/active",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("NAV_LOCATIONS_ACCESS,NAV_BOOKING_ACCESS")(
+				middlewares.RequireActivePlan( // read-only without an active plan
+					http.HandlerFunc(locationsinshao.HSetLocationActive),
+				),
+			),
+		),
+	).Methods(http.MethodPut)
+
+	r.Handle(
+		"/companies/{companyId}/booking-settings",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("")(
+				http.HandlerFunc(locationsinshao.HSelectBookingSettings),
+			),
+		),
+	).Methods(http.MethodGet)
+
+	r.Handle(
+		"/companies/{companyId}/booking-settings",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("NAV_LOCATIONS_ACCESS,NAV_BOOKING_ACCESS")(
+				middlewares.RequireActivePlan( // read-only without an active plan
+					http.HandlerFunc(locationsinshao.HSaveBookingSettings),
+				),
+			),
+		),
+	).Methods(http.MethodPut)
+
+	// =================================================================
 	//  TRACKING  -> any active company member + option-permission gate.
 	//  Order (mux): fixed "search" BEFORE the dynamic "{trackingConfigId}".
 	//  Replace "" with "NAV_TRACKING_MAINTENANCE_ACCESS" later to enable it.
@@ -476,6 +554,19 @@ func NewRouter() http.Handler {
 			),
 		),
 	).Methods(http.MethodDelete)
+
+	// Location of an appointment or booking request (2026-11-08): from
+	// Appointments, Booking requests (approval) and Book for a customer.
+	r.Handle(
+		"/companies/{companyId}/appointments/{appointmentId}/location",
+		security.RequireActiveCompanyMember(
+			middlewares.RequireOptionPermission("NAV_APPOINTMENTS_ACCESS,NAV_APPROVAL_B_ACCESS,NAV_SELF_BOOKING")(
+				middlewares.RequireActivePlan( // read-only without an active plan
+					http.HandlerFunc(appointmentsinshao.HSetAppointmentLocation),
+				),
+			),
+		),
+	).Methods(http.MethodPut)
 
 	// =================================================================
 	//  PAGE CONFIGURATION  -> one customer-page configuration per company.

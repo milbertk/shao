@@ -1,8 +1,10 @@
 package blnotifications
 
 import (
+	"strings"
 	"testing"
 
+	appointment "github.com/milbertk/shao/dataBasesLedger/appointments"
 	order "github.com/milbertk/shao/dataBasesLedger/orders"
 )
 
@@ -63,5 +65,40 @@ func TestDefaultSMTPFromEnv(t *testing.T) {
 	s := defaultSMTPFromEnv()
 	if s == nil || s.FromEmail != "notify@example.com" || s.Port != 465 || s.Security != "SSL" || s.FromName != "AlephK" {
 		t.Fatalf("unexpected default SMTP %+v", s)
+	}
+}
+
+func TestAppointmentLocationChange(t *testing.T) {
+	a := AppointmentSnapshot{ServiceID: "s", Date: "2026-11-20", StartHour: "10:00", EndHour: "11:00", Status: "SCHEDULED", LocationID: "her"}
+	b := a
+	b.LocationID = "sp"
+	if !AppointmentWhenChanged(a, b) {
+		t.Fatal("a new location must send the 'changed' email")
+	}
+	c := a
+	c.LocationName = "renamed"
+	if AppointmentWhenChanged(a, c) {
+		t.Fatal("only the name changed: no email")
+	}
+}
+
+func TestAppointmentLocationText(t *testing.T) {
+	name, address := "Heredia", "Av. 1"
+	lat, lng := 9.998, -84.117
+	a := appointment.AppointmentS{LocationName: &name, LocationAddress: &address, LocationLatitude: &lat, LocationLongitude: &lng}
+	got := appointmentLocationText(textsEN, &a)
+	want := "\n📍 Location: Heredia, Av. 1\nOpen in Maps: https://www.google.com/maps/search/?api=1&query=9.998000,-84.117000"
+	if got != want {
+		t.Fatalf("%q", got)
+	}
+	if es := appointmentLocationText(textsES, &a); !strings.Contains(es, "📍 Sede: Heredia, Av. 1") || !strings.Contains(es, "Abrir en Maps: ") {
+		t.Fatal(es)
+	}
+	if appointmentLocationText(textsEN, &appointment.AppointmentS{}) != "" {
+		t.Fatal("no location, no text")
+	}
+	html := bodyToHTML("x" + got)
+	if !strings.Contains(html, `<a href="https://www.google.com/maps/search/?api=1&amp;query=9.998000,-84.117000"`) {
+		t.Fatal(html)
 	}
 }

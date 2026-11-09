@@ -20,7 +20,7 @@ type promptContext struct {
 
 // assistantKnowledgeVersion says when assistantKnowledge was last checked
 // against the app. Change it every time the knowledge is updated.
-const assistantKnowledgeVersion = "2026-11-04 (shao #33)"
+const assistantKnowledgeVersion = "2026-11-08 (shao #43)"
 
 // assistantScreenPaths are the screens the assistant may link to. They must be
 // the same as ASSISTANT_ROUTES in p3
@@ -39,6 +39,7 @@ var assistantScreenPaths = []string{
 	"/shao/booking-requests",
 	"/shao/appointments",
 	"/shao/book-for-customer",
+	"/shao/locations",
 	"/shao/customers",
 	"/shao/page-configuration",
 	"/shao/reports",
@@ -76,9 +77,42 @@ Sell:
   through. Each step has the checkbox "Notify the customer (email)".
 Bookings:
 - Booking schedules [/shao/booking-schedules]: set the hours available for booking.
+  While "We use locations" is off (or there is no active location) a box says to
+  create the locations first, with the button "Go to Locations" (it can be closed).
+  Steps: 1 choose the service (type to search; the rest of the form stays
+  locked until then), 2 general information, 3 one mode only: "Recurring weekly
+  schedule" OR "Calendar availability". Changing the mode of a saved schedule
+  asks first: when saved, the hours of the other mode are deleted (booked
+  appointments are kept). Saved, errors and warnings also show as a pop-up
+  (toast). Two ranges in the same location at the same time are refused.
+  Calendar: past dates are history (greyed, not changed or saved again); the
+  calendar opens on today or the first open date from today. The
+  "Generated-space preview" shows the spaces of the selected day in one row per
+  location.
 - Booking requests [/shao/booking-requests]: approve or reject booking requests.
+  With "We use locations" on, the request detail has a "Location" list and
+  "Save location" to choose or change the location before approving (a
+  warning shows when the request has none; approving is still allowed).
 - Appointments [/shao/appointments]: manage appointments (done, cancelled, reopened).
+  With locations on, the detail of a scheduled appointment has "Location" +
+  "Save location"; the customer gets an email with the change, and a warning
+  shows if another appointment is at that hour in another location.
+- Store booking window: first the date, then the available times; after
+  choosing a time it scrolls to the end of the form: "Your choice" (date,
+  time, location) and "Your information" (name, phone, email, preferred
+  contact, notes), then Send; a round arrow button goes back to the top.
+- After every request that the company must approve (store booking request,
+  store order request, new time or cancellation request from the email link)
+  the store shows a pop-up "Request sent — pending approval": it is NOT
+  confirmed yet, check your email (a copy was sent now and another email comes
+  when the company approves or rejects it; also look in Spam), and "No email?
+  Contact <company>" with the company WhatsApp, the customer service email
+  (Company page) and the social link, each only when set.
 - Book for a customer [/shao/book-for-customer]: create an appointment for a customer.
+- Locations [/shao/locations] (Sedes): the switch "We use locations", the
+  places where the company attends appointments (name, address, details, map
+  point) and the switch "We can attend in more than one location at the same
+  time".
 Customers:
 - Customers [/shao/customers]: add, search and edit customers.
 My store:
@@ -121,6 +155,56 @@ HOW TO DO COMMON TASKS (current features; button names in English / Spanish)
   computer's time. The store top bar shows the company time too ("Hora de
   Costa Rica · 11:28") and "= 18:28 your time" for visitors in another zone.
   To change the zone: Company page -> "Time zone".
+- Locations (Sedes), for a company that attends in several places (e.g. a
+  lawyer in Heredia and San Pedro, an engineer in New York and New Jersey):
+  0. Locations [/shao/locations] -> turn on "We use locations" (Usamos
+     sedes). OFF (the default for new companies) = AlephK works as before
+     locations: no location in Booking schedules, Book for a customer,
+     Appointments, the store or the emails (saved locations stay for later).
+     Good for a company with one place that does not want to show it.
+  1. Locations [/shao/locations] -> "New location" (Nueva sede): name
+     (required, unique), address, details (floor, office, parking) and,
+     optionally, the map point: "Use my current location" (Usar mi ubicacion
+     actual, the browser asks for permission) or paste a Google Maps link
+     (the point is read from the link; short links maps.app.goo.gl do not
+     have it: open them and copy the long link) -> Save. "Open in Maps"
+     checks the point.
+  2. Booking schedules [/shao/booking-schedules] -> on each block of hours
+     choose its "Location" (optional; empty = no location, as before), or
+     "Customer chooses (any active location)" (El cliente elige): the
+     professional can attend those hours in any active location and the
+     customer picks the place when booking. With "same time" ON each location
+     has the block's places (e.g. 3 in each); with it OFF the places are
+     shared by all the locations (the person is in one place at a time).
+     A new time range lasts one appointment and starts where the last one
+     ends. Saving explains the problem: a range shorter than one appointment
+     (or ending before it starts), two ranges that overlap, two locations at
+     the same time while "same time" is OFF, or a "Customer chooses" range
+     sharing hours with another range.
+  3. The store shows the free times grouped by location with the address and
+     an "Open in Maps" link; with 2 or more locations the visitor can filter
+     by location. The appointment keeps its location, the emails show it
+     ("Location: name, address" + "Open in Maps") and the customer can change
+     it when asking for another time.
+  - Switch "We can attend in more than one location at the same time"
+    (Podemos atender en mas de una sede al mismo tiempo), OFF by default: OFF
+    = one location at a time, so a schedule can not have the same hours in
+    two different locations (any service); saving shows which hours clash,
+    e.g. "Monday 10:00-12:00 is already in Heredia (Consultation)". Hours
+    where the customer chooses clash with any other hours that have a
+    location. Turn it ON when several people or offices attend at the same
+    time; then each location has its own places (capacity). It can be turned
+    OFF (or "We use locations" turned ON) only when no hours clash.
+  - Book for a customer and Appointments have a "Location" field; with
+    one location at a time, saving warns when the same time is already taken
+    in another location.
+  - Delete: only a location that nothing uses is deleted; a used one is
+    disabled instead (its history stays). Disable / Enable hides or shows it
+    in the store; disabling with future appointments shows a warning (they
+    keep their location; tell those customers if needed).
+  - Access: the menu option "Locations" in Team and permissions; owners and
+    managers always have it; users with "Booking schedules" can also change
+    locations.
 - Short, readable store address (slug), e.g. .../maderas-finas:
   Company page [/shao/page-configuration] -> "Store address (link)"
   (Direccion de la tienda) -> type it or press "Suggest from name" (Sugerir
@@ -254,7 +338,9 @@ tracking, due dates, rankings and reports.
     get_best_sellers, get_cancellation_rate, get_orders_report,
     get_appointments_report). The full reports are in Reports [/shao/reports].
   - Free slots: first find the service with search_products_and_services,
-    then call get_available_slots for each date you need.
+    then call get_available_slots for each date you need. A slot or an
+    appointment can have a location (locationName, locationAddress): always
+    say the location with the hour when there is one.
 - For "this week" / "this month" questions, compute the exact dates from TODAY.
 - Resolve relative dates ("tomorrow", "next Monday") with TODAY below and
   always tell the user the exact date you used.

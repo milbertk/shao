@@ -15,6 +15,7 @@ type AppointmentSearchFilters struct {
 	CustomerName string
 	CustomerID   string
 	ServiceID    string
+	LocationID   string // only this location (2026-11-07)
 	Status       string
 	DateFrom     string // appointment_date >= DateFrom
 	DateTo       string // appointment_date <= DateTo
@@ -75,6 +76,7 @@ func SearchAppointments(filters AppointmentSearchFilters) ([]AppointmentS, error
 	addLike("customer_name", filters.CustomerName)
 	addEqual("customer_id", filters.CustomerID)
 	addEqual("service_id", filters.ServiceID)
+	addEqual("location_id::text", filters.LocationID)
 	addEqual("status", strings.ToUpper(filters.Status))
 
 	if v := strings.TrimSpace(filters.DateFrom); v != "" {

@@ -58,18 +58,19 @@ func SelectByPublicToken(token string) (*AppointmentS, error) {
 	return &item, nil
 }
 
-// MoveToNewTime changes date and hours and sets the status back to PENDING,
-// so the business approves the new time again (customer reschedule request).
-func MoveToNewTime(companyID, appointmentID, date, startHour, endHour string) error {
+// MoveToNewTime changes date, hours and location (2026-11-07; nil = no
+// location) and sets the status back to PENDING, so the business approves
+// the new time again (customer reschedule request).
+func MoveToNewTime(companyID, appointmentID, date, startHour, endHour string, locationID *string) error {
 	db, err := dbmanager.GetPostgresDB()
 	if err != nil {
 		return fmt.Errorf("database connection error: %w", err)
 	}
 	res, err := db.Exec(`
 		UPDATE public.tbl_appointment
-		SET appointment_date = $3, start_hour = $4, end_hour = $5, status = 'PENDING'
+		SET appointment_date = $3, start_hour = $4, end_hour = $5, location_id = $6, status = 'PENDING'
 		WHERE appointment_id = $1 AND company_id = $2
-	`, strings.TrimSpace(appointmentID), strings.TrimSpace(companyID), date, startHour, endHour)
+	`, strings.TrimSpace(appointmentID), strings.TrimSpace(companyID), date, startHour, endHour, locationID)
 	if err != nil {
 		return fmt.Errorf("failed to move appointment: %w", err)
 	}

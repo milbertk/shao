@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 	blnotifications "github.com/milbertk/shao/bussunessLedger/blnotifications"
 	appointment "github.com/milbertk/shao/dataBasesLedger/appointments"
+	"github.com/milbertk/shao/dataBasesLedger/locations"
 )
 
 // AppointmentSaveResult wraps the saved appointment plus the number of
@@ -15,6 +17,10 @@ import (
 type AppointmentSaveResult struct {
 	Appointment   appointment.AppointmentS `json:"appointment"`
 	ConflictCount int                      `json:"conflictCount"`
+	// OtherLocationCount (2026-11-07): appointments of ANY service at the
+	// same time in ANOTHER location, when the company attends in one
+	// location at a time (a warning; the save still succeeds).
+	OtherLocationCount int `json:"otherLocationCount"`
 }
 
 func emptyToNil(value *string) *string {
@@ -66,6 +72,13 @@ func BSaveAppointment(companyID string, input appointment.AppointmentS) (*Appoin
 
 	// A new appointment defaults to SCHEDULED.
 	appointmentID := strings.TrimSpace(input.AppointmentID)
+
+	// Location (2026-11-07): optional; it must belong to the company. A
+	// disabled location is kept only when the appointment already had it.
+	location, err := validateAppointmentLocation(companyID, appointmentID, &input)
+	if err != nil {
+		return nil, err
+	}
 	if appointmentID == "" && strings.TrimSpace(input.Status) == "" {
 		input.Status = "SCHEDULED"
 	}
@@ -107,6 +120,18 @@ func BSaveAppointment(companyID string, input appointment.AppointmentS) (*Appoin
 	}
 
 	// ---- Conflict warning (non-blocking) ----
+	// Locations count only while the company uses them (2026-11-08); the
+	// location stays saved either way.
+	locationsOn, _ := bllocations.LocationsEnabled(companyID)
+	locationID := ""
+	if location != nil {
+		if locationsOn {
+			locationID = location.LocationID
+		}
+		input.LocationName = &location.Name
+		input.LocationAddress = location.Address
+		input.LocationLatitude, input.LocationLongitude = location.Latitude, location.Longitude
+	}
 	conflicts, err := appointment.CountConflicts(
 		companyID,
 		input.ServiceID,
@@ -114,10 +139,20 @@ func BSaveAppointment(companyID string, input appointment.AppointmentS) (*Appoin
 		input.StartHour,
 		input.EndHour,
 		input.AppointmentID, // exclude self
+		locationID,
 	)
 	if err != nil {
 		// A conflict-count failure must not fail the save; report zero.
 		conflicts = 0
+	}
+	otherLocations := 0
+	if locationID != "" {
+		if active, err := bllocations.OneLocationAtATime(companyID); err == nil && active {
+			if n, err := appointment.CountOtherLocationConflicts(companyID, input.AppointmentDate,
+				input.StartHour, input.EndHour, locationID, input.AppointmentID); err == nil {
+				otherLocations = n
+			}
+		}
 	}
 
 	// Tell the customer that the company scheduled the appointment.
@@ -130,9 +165,55 @@ func BSaveAppointment(companyID string, input appointment.AppointmentS) (*Appoin
 	}
 
 	return &AppointmentSaveResult{
-		Appointment:   input,
-		ConflictCount: conflicts,
+		Appointment:        input,
+		ConflictCount:      conflicts,
+		OtherLocationCount: otherLocations,
 	}, nil
+}
+
+// validateAppointmentLocation normalizes input.LocationID, clears the read
+// only location fields and returns the location (nil = none).
+//
+//   - "locationId" not sent (older screens): an existing appointment KEEPS
+//     its location; a new one has none.
+//   - "locationId": "" removes the location.
+func validateAppointmentLocation(companyID, appointmentID string, input *appointment.AppointmentS) (*locations.CompanyLocationS, error) {
+	input.LocationName, input.LocationAddress = nil, nil
+	input.LocationLatitude, input.LocationLongitude = nil, nil
+
+	var previous *appointment.AppointmentS
+	loaded := false
+	loadPrevious := func() *appointment.AppointmentS {
+		if !loaded && appointmentID != "" {
+			loaded = true
+			item := appointment.AppointmentS{AppointmentID: appointmentID, CompanyID: companyID}
+			if err := item.Select(); err == nil {
+				previous = &item
+			}
+		}
+		return previous
+	}
+
+	if input.LocationID == nil {
+		if prev := loadPrevious(); prev != nil {
+			input.LocationID = prev.LocationID
+		}
+	}
+	input.LocationID = bllocations.NormalizeID(input.LocationID)
+
+	location, err := bllocations.ValidateLocationForCompany(companyID, input.LocationID, false)
+	if err != nil || location == nil {
+		return nil, err
+	}
+	input.LocationID = &location.LocationID
+	if location.Active {
+		return location, nil
+	}
+	if prev := loadPrevious(); prev != nil && prev.LocationID != nil &&
+		strings.EqualFold(*prev.LocationID, location.LocationID) {
+		return location, nil
+	}
+	return nil, bllocations.ErrLocationDisabled
 }
 
 // appointmentUpdateEvent decides which email an appointment update sends

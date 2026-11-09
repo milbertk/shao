@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 	appointment "github.com/milbertk/shao/dataBasesLedger/appointments"
 	order "github.com/milbertk/shao/dataBasesLedger/orders"
 	"github.com/milbertk/shao/dataBasesLedger/weborder"
@@ -45,6 +46,7 @@ func NotifyAppointment(companyID, appointmentID, event, reason string) {
 			logNotSent(companyID, "APPOINTMENT", appointmentID, event, "appointment not loaded: "+err.Error())
 			return
 		}
+		hideLocationWhenOff(&a)
 
 		link := ""
 		if token, err := ensureAppointmentToken(companyID, appointmentID); err == nil {
@@ -95,6 +97,11 @@ func NotifyAppointment(companyID, appointmentID, event, reason string) {
 		default:
 			return
 		}
+		// Where (2026-11-07): name, address and an "Open in Maps" link.
+		switch event {
+		case EventRequested, EventCreated, EventApproved, EventReopened, EventRescheduleRequested:
+			body += appointmentLocationText(t, &a)
+		}
 
 		reference := service + ", " + date + " " + timeRange(c, a.StartHour, a.EndHour)
 		// Small "request a cancellation" line while the appointment is still ahead.
@@ -123,12 +130,44 @@ func NotifyAppointment(companyID, appointmentID, event, reason string) {
 			line(t.labelService, service) +
 			line(t.labelDate, date) +
 			line(t.labelTime, when) +
+			line(t.labelLocation, deref(a.LocationName)) +
 			line(t.labelCustomer, a.CustomerName) +
 			line(t.labelPhone, deref(a.Phone)) +
 			line(t.labelEmail, deref(a.Email)) +
 			line(t.labelComments, deref(a.Comments))
 		deliver(c, "APPOINTMENT", appointmentID, event, AudienceCompany, c.NotificationEmail, coSubject, coBody)
 	})
+}
+
+// hideLocationWhenOff removes the location from the copy used by the emails
+// when the company does not use locations (2026-11-08).
+func hideLocationWhenOff(a *appointment.AppointmentS) {
+	if a == nil || a.LocationID == nil {
+		return
+	}
+	if on, err := bllocations.LocationsEnabled(a.CompanyID); err == nil && on {
+		return
+	}
+	a.LocationID, a.LocationName, a.LocationAddress = nil, nil, nil
+	a.LocationLatitude, a.LocationLongitude = nil, nil
+}
+
+// appointmentLocationText returns the location lines of an appointment for
+// the customer (starts with a line break), or "" when it has no location.
+func appointmentLocationText(t textSet, a *appointment.AppointmentS) string {
+	name := deref(a.LocationName)
+	if name == "" {
+		return ""
+	}
+	place := name
+	if address := deref(a.LocationAddress); address != "" {
+		place += ", " + address
+	}
+	text := "\n" + line(t.labelLocation, place)
+	if link := bllocations.MapsURL(a.LocationAddress, a.LocationLatitude, a.LocationLongitude); link != "" {
+		text += line(t.labelMaps, link)
+	}
+	return strings.TrimRight(text, "\n")
 }
 
 // ---------------------------------------------------------------------------

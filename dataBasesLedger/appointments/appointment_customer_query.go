@@ -19,6 +19,7 @@ type CustomerAppointmentRow struct {
 	Status          string    `json:"status"`
 	CreatedAt       time.Time `json:"createdAt"`
 	PublicToken     *string   `json:"-"`
+	LocationName    string    `json:"locationName,omitempty"` // 2026-11-07
 }
 
 // SelectAppointmentsForCustomer returns the appointments of one company
@@ -47,11 +48,14 @@ func SelectAppointmentsForCustomer(companyID, email string, limit int) ([]Custom
 			to_char(a.end_hour, 'HH24:MI'),
 			a.status,
 			a.created_at,
-			a.public_token
+			a.public_token,
+			COALESCE(l.name, '')
 		FROM public.tbl_appointment a
 		LEFT JOIN public.tbl_products p
 		       ON p.product_internal_id::text = a.service_id::text
 		      AND p.company_id::text = a.company_id::text
+		LEFT JOIN public.tbl_company_location l
+		       ON l.location_id = a.location_id
 		WHERE a.company_id::text = $1
 		  AND lower(a.email) = lower($2)
 		ORDER BY a.appointment_date DESC, a.start_hour DESC
@@ -67,7 +71,7 @@ func SelectAppointmentsForCustomer(companyID, email string, limit int) ([]Custom
 		var r CustomerAppointmentRow
 		if err := rows.Scan(
 			&r.AppointmentID, &r.ServiceName, &r.AppointmentDate, &r.StartHour,
-			&r.EndHour, &r.Status, &r.CreatedAt, &r.PublicToken,
+			&r.EndHour, &r.Status, &r.CreatedAt, &r.PublicToken, &r.LocationName,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan customer appointment: %w", err)
 		}

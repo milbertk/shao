@@ -43,7 +43,10 @@ UNION ALL SELECT 'migration_company_plans',                to_regclass('public.t
 UNION ALL SELECT 'migration_plans_support_storage_price',  EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tbl_plans' AND column_name='storage_gb')
 UNION ALL SELECT 'migration_plans_entrepreneur_special',   to_regclass('public.tbl_company_storage_file') IS NOT NULL
 UNION ALL SELECT 'migration_company_legal_texts',          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tbl_page_configuration' AND column_name='terms_text')
-UNION ALL SELECT 'migration_company_time_zone (NEW)',      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tbl_page_configuration' AND column_name='time_zone');
+UNION ALL SELECT 'migration_company_time_zone',            EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tbl_page_configuration' AND column_name='time_zone')
+UNION ALL SELECT 'migration_company_locations',            to_regclass('public.tbl_company_location') IS NOT NULL
+UNION ALL SELECT 'migration_company_locations_options',   EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tbl_company_booking_settings' AND column_name='locations_enabled')
+UNION ALL SELECT 'migration_booking_overlap_by_location (NEW)', NOT EXISTS (SELECT 1 FROM pg_constraint WHERE contype='x' AND conrelid IN ('public.tbl_booking_manual_slot'::regclass,'public.tbl_booking_recurring_range'::regclass) AND pg_get_constraintdef(oid) NOT ILIKE '%location_id%');
 ```
 
 And this one in the **usersAK** database:
@@ -75,7 +78,10 @@ Run only the ones that are still missing, **in this order**:
 | 12 | `migration_plans_entrepreneur_special.sql` | ENTREPRENEUR, SPECIAL, no free plan, storage table | Needs step 11. Moves FREE companies to ENTREPRENEUR. |
 | 13 | `migration_company_legal_texts.sql` (2026-10-24) | `terms_text`, `privacy_text` in the Company page | Needed by shao #15. |
 | 14 | **`migration_security_cc1.sql`** (NEW, 2026-10-25) | AI questions per plan (max 10% of price), store form / email limits, Firebase bucket, indexes | Needed by shao #16. Check the AI questions of each plan with query (a) inside. |
-| 15 | **`migration_company_time_zone.sql`** (NEW, 2026-11-04) | `time_zone` (default `America/Costa_Rica`) and `time_zone_label` in the Company page | Needed by shao #32. **Run it before starting shao #32.** Also put the server in UTC (section 1b). |
+| 15 | `migration_company_time_zone.sql` (2026-11-04) | `time_zone` (default `America/Costa_Rica`) and `time_zone_label` in the Company page | Needed by shao #32. **Run it before starting shao #32.** Also put the server in UTC (section 1b). |
+| 16 | `migration_company_locations.sql` (2026-11-07) | Locations ("Sedes"): `tbl_company_location`, optional `location_id` on weekly hours, date slots and appointments, `tbl_company_booking_settings` (switch "more than one location at the same time", off) | Needed by shao #34. **Run it before starting shao #34.** Changes no current data. Optional after step 17: `data_assign_locations.sql` (give a location to the current hours and appointments of ONE company; read it first). |
+| 17 | `migration_company_locations_options.sql` (2026-11-08) | "We use locations" (`tbl_company_booking_settings.locations_enabled`, off; companies that already have a location are turned on once) and "Customer chooses" on weekly hours and date slots (`customer_chooses_location`) | Needed by shao #35. **Run it before starting shao #35**, on every shao database (your computer and the server). |
+| 18 | **`migration_booking_overlap_by_location.sql`** (NEW, 2026-11-08) | Rebuilds the database rules that refuse overlapping hours in one schedule (`ex_manual_no_overlap` and the weekly one) with the location: two DIFFERENT locations may overlap ("same time" switch decides), same location still refused. Prints the old rules first (undo). | Needed by shao #39 to save the same hours in two locations. Run it on every shao database. Safe to run twice. |
 
 **Do not run** `migration_company_plans_usersak.sql` (old, not needed anymore — you can delete it).
 
@@ -84,6 +90,9 @@ cd ~/projects/go/src/github.com/milbertk/shao
 psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_company_legal_texts.sql
 psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_security_cc1.sql
 psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_company_time_zone.sql
+psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_company_locations.sql
+psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_company_locations_options.sql
+psql -h <host> -U <user> -d <shao_database> -v ON_ERROR_STOP=1 -f sql/migration_booking_overlap_by_location.sql
 ```
 
 ## 1b. Server clock and database in UTC (2026-11-04, shao #32)
@@ -272,3 +281,9 @@ Optional, once: `go mod tidy` in usersAppAK marks `godotenv` as a direct depende
    "Terms and conditions" link, send a support request (you receive the email), save an order, approve a web order.
 6. A user without the right permission now gets **403** on write actions: give the permissions in
    "Company users / permissions" before you invite people (owners and managers always have access).
+7. Locations (shao #34, 2026-11-07): publish shao, p3 and the store **together** (an older p3 or store sends no
+   location; a newer one sent to an older shao is refused as "unknown field"). Test: Locations → New location →
+   Booking schedules → choose the location on some hours → the store shows the times by location → book one →
+   the email shows "📍 Location" and "Open in Maps". Employees need the "Locations" (or "Booking schedules")
+   permission to change locations. From shao #35 a company sees locations only after it turns on "We use locations"
+   in the Locations screen.

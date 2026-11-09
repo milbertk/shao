@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 	appointment "github.com/milbertk/shao/dataBasesLedger/appointments"
 	"github.com/milbertk/shao/dataBasesLedger/configuration"
 	"github.com/milbertk/shao/dataBasesLedger/weborder"
@@ -197,6 +198,9 @@ func ValidatePublicAppointmentRequest(req PublicAppointmentRequest) error {
 	}
 	if tooLong(req.Comments, maxPublicNotesLength) {
 		return invalidField("comments are too long (maximum %d characters)", maxPublicNotesLength)
+	}
+	if id := strings.TrimSpace(req.LocationID); id != "" && !bllocations.ValidID(id) {
+		return invalidField("location is not valid")
 	}
 	return nil
 }

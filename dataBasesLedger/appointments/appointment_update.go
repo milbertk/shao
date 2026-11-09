@@ -39,7 +39,8 @@ func (a *AppointmentS) Update() error {
 			end_hour = $12,
 			status = COALESCE(NULLIF($13, ''), 'SCHEDULED'),
 			comments = $14,
-			registered_by = $15
+			registered_by = $15,
+			location_id = $16
 		WHERE appointment_id = $1
 		  AND company_id = $2
 		RETURNING appointment_id, created_at, updated_at
@@ -62,6 +63,7 @@ func (a *AppointmentS) Update() error {
 		a.Status,
 		a.Comments,
 		a.RegisteredBy,
+		a.LocationID,
 	).Scan(
 		&a.AppointmentID,
 		&a.CreatedAt,

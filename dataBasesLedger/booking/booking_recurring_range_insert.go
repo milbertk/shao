@@ -17,6 +17,8 @@ type BookingRecurringRangeS struct {
 	EndTime          string    `json:"endTime"`   // "HH:MM"
 	Appointments     *int      `json:"appointments,omitempty"`
 	Active           bool      `json:"active"`
+	LocationID       *string   `json:"locationId,omitempty"`    // optional location of these hours (2026-11-07); nil = none
+	CustomerChoice   bool      `json:"customerChoosesLocation"` // any active location, the customer picks it (2026-11-08)
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
@@ -36,9 +38,11 @@ func (a *BookingRecurringRangeS) Insert() error {
 			start_time,
 			end_time,
 			appointments,
-			active
+			active,
+			location_id,
+			customer_chooses_location
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING recurring_range_id, created_at, updated_at
 	`
 
@@ -51,6 +55,8 @@ func (a *BookingRecurringRangeS) Insert() error {
 		a.EndTime,
 		a.Appointments,
 		a.Active,
+		a.LocationID,
+		a.CustomerChoice,
 	).Scan(
 		&a.RecurringRangeID,
 		&a.CreatedAt,

@@ -21,6 +21,7 @@ type PublicAppointmentRequest struct {
 	StartHour       string `json:"startHour"`       // HH:MM
 	EndHour         string `json:"endHour"`         // HH:MM
 	Comments        string `json:"comments"`
+	LocationID      string `json:"locationId"` // location of the chosen time (2026-11-07, optional)
 }
 
 func strOrNil(v string) *string {
@@ -62,8 +63,8 @@ func BCreatePublicAppointmentRequest(companyID string, req PublicAppointmentRequ
 	unlock := lockSlot(companyID, serviceID, date)
 	defer unlock()
 
-	startHour, endHour, err := ValidateRequestedSlot(
-		companyID, serviceID, date, req.StartHour, req.EndHour,
+	startHour, endHour, locationID, err := ValidateRequestedSlot(
+		companyID, serviceID, date, req.StartHour, req.EndHour, req.LocationID,
 	)
 	if err != nil {
 		return nil, err
@@ -84,6 +85,7 @@ func BCreatePublicAppointmentRequest(companyID string, req PublicAppointmentRequ
 		Status:                "PENDING", // waiting for the provider to approve
 		Comments:              strOrNil(req.Comments),
 		RegisteredBy:          strOrNil("showcase-guest"),
+		LocationID:            strOrNil(locationID),
 	}
 
 	if err := item.Insert(); err != nil {

@@ -114,6 +114,7 @@ func loadCancelRequestData(c companyContext, kind, companyID, entityID string) (
 		if err := a.Select(); err != nil {
 			return nil, fmt.Errorf("appointment not loaded: %w", err)
 		}
+		hideLocationWhenOff(&a)
 		service, _ := productInfo(companyID, a.ServiceID)
 		if service == "" {
 			service = t.labelService
@@ -128,6 +129,7 @@ func loadCancelRequestData(c companyContext, kind, companyID, entityID string) (
 		d.details = line(t.labelService, service) +
 			line(t.labelDate, a.AppointmentDate) +
 			line(t.labelTime, timeRangeOn(c, a.AppointmentDate, a.StartHour, a.EndHour)) +
+			line(t.labelLocation, deref(a.LocationName)) +
 			line(t.labelComments, deref(a.Comments))
 		d.whatsappMsg = fmt.Sprintf(t.waAboutBooking, d.reference)
 

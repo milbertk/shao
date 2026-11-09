@@ -17,7 +17,9 @@ const manualSlotColumns = `
 	to_char(end_time, 'HH24:MI'),
 	appointments,
 	created_at,
-	updated_at
+	updated_at,
+	location_id::text,
+	customer_chooses_location
 `
 
 func scanManualSlot(row interface {
@@ -34,6 +36,8 @@ func scanManualSlot(row interface {
 		&s.Appointments,
 		&s.CreatedAt,
 		&s.UpdatedAt,
+		&s.LocationID,
+		&s.CustomerChoice,
 	)
 }
 

@@ -314,6 +314,7 @@ type toolAppointmentRow struct {
 	Service      string `json:"service"`
 	Status       string `json:"status"`
 	Comments     string `json:"comments,omitempty"`
+	Location     string `json:"location,omitempty"` // 2026-11-07
 }
 
 func toolSearchAppointments(tc *toolContext, input json.RawMessage) (any, error) {
@@ -354,6 +355,7 @@ func toolSearchAppointments(tc *toolContext, input json.RawMessage) (any, error)
 			Service:      tc.serviceName(a.ServiceID),
 			Status:       a.Status,
 			Comments:     truncateRunes(derefString(a.Comments), 120),
+			Location:     derefString(a.LocationName),
 		})
 	}
 	return map[string]any{"count": len(rows), "appointments": rows, "limitedTo": maxToolRows}, nil

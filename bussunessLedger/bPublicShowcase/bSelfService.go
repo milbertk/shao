@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/milbertk/shao/bussunessLedger/bllocations"
 	blnotifications "github.com/milbertk/shao/bussunessLedger/blnotifications"
 	blpageconfiguration "github.com/milbertk/shao/bussunessLedger/blpageconfiguration"
 	"github.com/milbertk/shao/bussunessLedger/bltimezone"
@@ -56,6 +57,11 @@ type SelfServiceAppointment struct {
 	StartHour   string `json:"startHour"`
 	EndHour     string `json:"endHour"`
 	AllDay      bool   `json:"allDay"`
+	// Location (2026-11-07); empty when the appointment has none.
+	LocationID      string `json:"locationId,omitempty"`
+	LocationName    string `json:"locationName,omitempty"`
+	LocationAddress string `json:"locationAddress,omitempty"`
+	MapsURL         string `json:"mapsUrl,omitempty"`
 }
 
 // SelfServiceItem is one line of a web order.
@@ -84,7 +90,12 @@ type SelfServiceView struct {
 	CancelRequestedAt string `json:"cancelRequestedAt,omitempty"` // RFC 3339, when already requested
 	CanReschedule     bool   `json:"canReschedule"`
 	Whatsapp          string `json:"whatsapp,omitempty"`
-	MinNoticeHours    int    `json:"minNoticeHours"`
+	// Company contact for the "pending approval" pop-up (2026-11-08): customer
+	// service email and social link, each only when set.
+	ContactEmail   string `json:"contactEmail,omitempty"`
+	SocialLink     string `json:"socialLink,omitempty"`
+	SocialLinkType string `json:"socialLinkType,omitempty"`
+	MinNoticeHours int    `json:"minNoticeHours"`
 	// Time zone of the company (2026-11-04): the appointment hours are in it.
 	TimeZone      string `json:"timeZone"`
 	TimeZoneLabel string `json:"timeZoneLabel,omitempty"`
@@ -114,15 +125,23 @@ func validToken(token string) bool {
 	return tokenKind(token) != ""
 }
 
-func companyPublicInfo(companyID string) (name, whatsapp string) {
+// companyPublic is the public name and contact of a company (2026-11-08:
+// customer service email and social link added).
+type companyPublic struct {
+	Name, Whatsapp, Email, SocialLink, SocialLinkType string
+}
+
+func companyPublicInfo(companyID string) companyPublic {
+	var info companyPublic
 	page := pageconfiguration.PageConfigurationS{CompanyID: companyID}
 	if err := page.SelectByCompany(); err == nil {
-		name = page.DisplayName
-		if page.ContactWhatsapp != nil {
-			whatsapp = *page.ContactWhatsapp
-		}
+		info.Name = page.DisplayName
+		info.Whatsapp = derefText(page.ContactWhatsapp)
+		info.Email = derefText(blpageconfiguration.PublicContactEmail(page.CustomerServiceEmail))
+		info.SocialLink = derefText(page.SocialLink)
+		info.SocialLinkType = derefText(page.SocialLinkType)
 	}
-	return name, whatsapp
+	return info
 }
 
 func derefText(p *string) string {
@@ -206,6 +225,12 @@ func selfServiceLookup(token string) (*SelfServiceView, string, error) {
 			EndHour:     end,
 			AllDay:      start == allDayStart && end == allDayEnd,
 		}
+		if a.LocationID != nil && locationsOn(a.CompanyID) {
+			view.Appointment.LocationID = *a.LocationID
+			view.Appointment.LocationName = derefText(a.LocationName)
+			view.Appointment.LocationAddress = derefText(a.LocationAddress)
+			view.Appointment.MapsURL = bllocations.MapsURL(a.LocationAddress, a.LocationLatitude, a.LocationLongitude)
+		}
 		view.Reference = strings.TrimSpace(serviceName + " " + a.AppointmentDate)
 		view.CanRequestCancel = appointmentCanRequestCancel(a)
 		view.CanReschedule = appointmentCanChange(a)
@@ -271,7 +296,9 @@ func selfServiceLookup(token string) (*SelfServiceView, string, error) {
 		view.CanRequestCancel = false
 	}
 
-	view.CompanyName, view.Whatsapp = companyPublicInfo(view.CompanyID)
+	company := companyPublicInfo(view.CompanyID)
+	view.CompanyName, view.Whatsapp = company.Name, company.Whatsapp
+	view.ContactEmail, view.SocialLink, view.SocialLinkType = company.Email, company.SocialLink, company.SocialLinkType
 	zone, label := bltimezone.CompanyZone(view.CompanyID)
 	view.TimeZone, view.TimeZoneLabel = zone.String(), label
 	return view, entityID, nil
@@ -319,6 +346,7 @@ type RescheduleInput struct {
 	AppointmentDate string `json:"appointmentDate"`
 	StartHour       string `json:"startHour"`
 	EndHour         string `json:"endHour"`
+	LocationID      string `json:"locationId"` // location of the new time (2026-11-07, optional)
 }
 
 // BSelfServiceReschedule moves an appointment to a new free slot. The
@@ -348,18 +376,34 @@ func BSelfServiceReschedule(token string, input RescheduleInput) (*SelfServiceVi
 	unlock := lockSlot(a.CompanyID, a.ServiceID, date)
 	defer unlock()
 
-	start, end, err := ValidateRequestedSlot(a.CompanyID, a.ServiceID, date, input.StartHour, input.EndHour)
+	if id := strings.TrimSpace(input.LocationID); id != "" && !bllocations.ValidID(id) {
+		return nil, errors.New("invalid location")
+	}
+	start, end, locationID, err := ValidateRequestedSlot(a.CompanyID, a.ServiceID, date, input.StartHour, input.EndHour, input.LocationID)
 	if err != nil {
 		return nil, err
 	}
-	if date == a.AppointmentDate && start == hhmm(a.StartHour) && end == hhmm(a.EndHour) {
+	newLocation := strOrNil(locationID)
+	if !locationsOn(a.CompanyID) {
+		// The company does not use locations (2026-11-08): keep the one saved.
+		newLocation, locationID = a.LocationID, derefText(a.LocationID)
+	}
+	sameLocation := strings.EqualFold(locationID, derefText(a.LocationID))
+	if date == a.AppointmentDate && start == hhmm(a.StartHour) && end == hhmm(a.EndHour) && sameLocation {
 		return nil, ErrSameTime
 	}
 
-	if err := appointment.MoveToNewTime(a.CompanyID, a.AppointmentID, date, start, end); err != nil {
+	if err := appointment.MoveToNewTime(a.CompanyID, a.AppointmentID, date, start, end, newLocation); err != nil {
 		return nil, err
 	}
 	blnotifications.NotifyAppointment(a.CompanyID, a.AppointmentID, blnotifications.EventRescheduleRequested, "")
 
 	return BSelfServiceView(token)
+}
+
+// locationsOn tells if the company uses locations (2026-11-08). On a read
+// error the answer is "no" (nothing about locations is shown).
+func locationsOn(companyID string) bool {
+	on, err := bllocations.LocationsEnabled(companyID)
+	return err == nil && on
 }

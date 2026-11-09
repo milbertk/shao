@@ -17,7 +17,9 @@ const recurringRangeColumns = `
 	appointments,
 	active,
 	created_at,
-	updated_at
+	updated_at,
+	location_id::text,
+	customer_chooses_location
 `
 
 func scanRecurringRange(row interface {
@@ -34,6 +36,8 @@ func scanRecurringRange(row interface {
 		&r.Active,
 		&r.CreatedAt,
 		&r.UpdatedAt,
+		&r.LocationID,
+		&r.CustomerChoice,
 	)
 }
 

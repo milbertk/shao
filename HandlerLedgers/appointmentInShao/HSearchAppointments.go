@@ -58,6 +58,7 @@ func HSearchAppointments(w http.ResponseWriter, r *http.Request) {
 		CustomerName: strings.TrimSpace(query.Get("customerName")),
 		CustomerID:   strings.TrimSpace(query.Get("customerId")),
 		ServiceID:    strings.TrimSpace(query.Get("serviceId")),
+		LocationID:   strings.TrimSpace(query.Get("locationId")),
 		Status:       strings.TrimSpace(query.Get("status")),
 		DateFrom:     strings.TrimSpace(query.Get("dateFrom")),
 		DateTo:       strings.TrimSpace(query.Get("dateTo")),

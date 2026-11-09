@@ -49,6 +49,9 @@ type publicPageConfiguration struct {
 	ContactWhatsapp *string `json:"contactWhatsapp,omitempty"`
 	SocialLink      *string `json:"socialLink,omitempty"`
 	SocialLinkType  *string `json:"socialLinkType,omitempty"`
+	// Customer service email (Company page, 2026-11-08): shown in the "Request
+	// sent — pending approval" pop-up ("No email? Contact ..."). Only when valid.
+	ContactEmail *string `json:"contactEmail,omitempty"`
 
 	// Time zone of the company (2026-11-04): the store shows the slots in
 	// this zone and computes "today" with it.
@@ -107,6 +110,7 @@ func HPublicPageConfiguration(w http.ResponseWriter, r *http.Request) {
 		ContactWhatsapp:     config.ContactWhatsapp,
 		SocialLink:          config.SocialLink,
 		SocialLinkType:      config.SocialLinkType,
+		ContactEmail:        blpageconfiguration.PublicContactEmail(config.CustomerServiceEmail),
 		TimeZone:            bltimezone.LocationFor(config.TimeZone).String(),
 		TimeZoneLabel:       config.TimeZoneLabel,
 	})

@@ -31,7 +31,9 @@ func (a *BookingRecurringRangeS) Update() error {
 			start_time = $4,
 			end_time = $5,
 			appointments = $6,
-			active = $7
+			active = $7,
+			location_id = $8,
+			customer_chooses_location = $9
 		WHERE recurring_range_id = $1
 		  AND company_id = $2
 		RETURNING recurring_range_id, created_at, updated_at
@@ -46,6 +48,8 @@ func (a *BookingRecurringRangeS) Update() error {
 		a.EndTime,
 		a.Appointments,
 		a.Active,
+		a.LocationID,
+		a.CustomerChoice,
 	).Scan(
 		&a.RecurringRangeID,
 		&a.CreatedAt,
